@@ -5,16 +5,46 @@ import dotenv from "dotenv";
 dotenv.config();
 
 const app = express();
-app.use(cors({ origin: "http://localhost:3000" }));
+
+// CORS configuration for deployment
+const allowedOrigins = [
+  "http://localhost:3000", // Development
+  process.env.FRONTEND_URL, // Production frontend URL (set this env var)
+  "https://*.netlify.app" // Allow all Netlify domains
+];
+
+// If no specific FRONTEND_URL is set, allow common origins
+app.use(cors({
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin) return callback(null, true);
+
+    // Allow all localhost for development
+    if (origin.includes('localhost')) return callback(null, true);
+
+    // Check against allowed origins
+    const isAllowed = allowedOrigins.some(allowed => {
+      if (allowed.startsWith("*.")) {
+        const domain = allowed.slice(2); // Remove "*."
+        return origin.endsWith(domain);
+      }
+      return origin === allowed;
+    });
+
+    if (isAllowed) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  }
+}));
+
 app.use(express.json());
 
 // DATABASE CONNECTION
 const pool = new Pool({
-  user: "postgres",
-  host: "127.0.0.1",
-  database: "lifelink_db",
-  password: "123",  // <-- will secure later
-  port: 5433
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 // TEST ROUTE
@@ -225,6 +255,7 @@ app.delete("/api/admin/donors/:id", async (req, res) => {
 });
 
 // RUN SERVER
-app.listen(5000, () => {
-  console.log("✅ Backend server running on http://localhost:5000");
+const PORT = process.env.PORT || 5000;
+app.listen(PORT, () => {
+  console.log(`✅ Backend server running on port ${PORT}`);
 });
